@@ -36,6 +36,10 @@ A web application for encrypting and decrypting text and files using **AES (Fern
 4. Open http://127.0.0.1:5000
  in your browser.
 
+----
+# Railway public link is:
+👉 https://encryption-web-app-production.up.railway.app
+
 Notes
 
 - Keep your AES key safe — the app generates a new key every run.
