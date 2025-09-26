@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Smart Encryption • Encrypt & Decrypt</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="bg-animated" aria-hidden="true"></div>
+
+  <main class="app">
+    <header class="app-header">
+      <div>
+        <h1 class="title">🔐 Smart Encryption</h1>
+        <p class="tagline">AES (Fernet) & Caesar • quick, clean, and classy</p>
+      </div>
+
+      <div class="controls">
+        <button id="themeToggle" class="icon-btn" aria-label="Toggle theme">🌙</button>
+        <button id="downloadBtn" class="action-btn" title="Download result as .txt">Download</button>
+      </div>
+    </header>
+
+    <!-- Unified Form for Text & File -->
+    <section class="card">
+      <form method="POST" id="cryptoForm" enctype="multipart/form-data">
+        <label for="text" class="label">Input Text</label>
+        <textarea id="text" name="text" placeholder="Type or paste text here..." maxlength="5000">{{ request.form.get('text','') }}</textarea>
+
+        <div class="file-upload">
+          <h3>Or Drag & Drop a File</h3>
+          <div id="drop-zone">
+            <p>Drop your file here or click to upload</p>
+            <input type="file" id="fileInput" name="file" hidden>
+          </div>
+        </div>
+
+        <div class="row small">
+          <div class="left">
+            <div class="radio-group" role="radiogroup" aria-label="Method">
+              <label><input type="radio" name="method" value="AES" checked> AES (Fernet)</label>
+              <label><input type="radio" name="method" value="Caesar"> Caesar</label>
+            </div>
+          </div>
+
+          <div class="right">
+            <div class="char-counter"><span id="count">0</span> chars</div>
+          </div>
+        </div>
+
+        <div class="row actions">
+          <button class="primary" type="submit" name="action" value="encrypt">Encrypt</button>
+          <button class="ghost" type="submit" name="action" value="decrypt">Decrypt</button>
+
+          <div class="strength">
+            <div class="meter" title="Estimated entropy / strength">
+              <div id="meterBar" class="meter-bar"></div>
+            </div>
+            <small id="meterLabel">Strength</small>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <section class="card result-card">
+      <div class="result-head">
+        <h2>Result</h2>
+        <div class="result-actions">
+          <button id="copyBtn" class="icon-btn" title="Copy result">📋</button>
+          <button id="clearBtn" class="icon-btn" title="Clear">✖</button>
+        </div>
+      </div>
+
+      <div class="result-area">
+        <pre id="result" class="result-box" aria-live="polite">{{ result|default('') }}</pre>
+      </div>
+    </section>
+
+    {% if file_url %}
+      <h3>Processed File:</h3>
+      <a href="{{ file_url }}" download>⬇ Download File</a>
+    {% endif %}
+
+    <footer class="footer">Made for dramatic flair & utility • <small>Keep your AES key safe — app generates a new key each run.</small></footer>
+  </main>
+
+  <!-- Toast container -->
+  <div id="toastWrap" aria-hidden="true"></div>
+
+<script>
+const textEl = document.getElementById('text');
+const countEl = document.getElementById('count');
+const meterBar = document.getElementById('meterBar');
+const meterLabel = document.getElementById('meterLabel');
+const resultEl = document.getElementById('result');
+const copyBtn = document.getElementById('copyBtn');
+const clearBtn = document.getElementById('clearBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const themeToggle = document.getElementById('themeToggle');
+const toastWrap = document.getElementById('toastWrap');
+const dropZone = document.getElementById("drop-zone");
+const fileInput = document.getElementById("fileInput");
+
+// Toast helper
+function showToast(msg, timeout=1800) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  toastWrap.appendChild(t);
+  requestAnimationFrame(()=> t.classList.add('show'));
+  setTimeout(()=> { t.classList.remove('show'); setTimeout(()=> t.remove(),300); }, timeout);
+}
+
+// Character counter + strength meter
+function updateCounterAndStrength() {
+  const v = textEl.value || '';
+  countEl.textContent = v.length;
+  const strength = estimateStrength(v);
+  meterBar.style.width = Math.min(100, Math.round(strength*100)) + '%';
+  if (strength < 0.33) {
+    meterBar.dataset.level = 'low'; meterLabel.textContent = 'Weak';
+  } else if (strength < 0.66) {
+    meterBar.dataset.level = 'med'; meterLabel.textContent = 'Fair';
+  } else {
+    meterBar.dataset.level = 'high'; meterLabel.textContent = 'Strong';
+  }
+}
+function estimateStrength(s) {
+  if (!s) return 0;
+  let score = Math.min(s.length / 100, 1);
+  const classes = [/[a-z]/.test(s), /[A-Z]/.test(s), /[0-9]/.test(s), /[^A-Za-z0-9]/.test(s)];
+  const variety = classes.reduce((a,b)=> a + (b?1:0), 0)/4;
+  return Math.min(1, score*0.6 + variety*0.5);
+}
+
+// Copy / Clear / Download
+copyBtn.addEventListener('click', ()=> {
+  const txt = resultEl.innerText || '';
+  if (!txt.trim()) { showToast('Nothing to copy'); return; }
+  navigator.clipboard.writeText(txt).then(()=> showToast('Copied')).catch(()=> showToast('Copy failed'));
+});
+clearBtn.addEventListener('click', ()=> {
+  textEl.value = ''; resultEl.innerText = ''; updateCounterAndStrength(); showToast('Cleared');
+});
+downloadBtn.addEventListener('click', ()=> {
+  const txt = resultEl.innerText || '';
+  if (!txt.trim()) { showToast('No content to download'); return; }
+  const blob = new Blob([txt], {type: 'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'result.txt'; document.body.appendChild(a); a.click(); a.remove();
+  showToast('Downloaded');
+});
+
+// Theme toggle
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  themeToggle.textContent = theme==='dark'?'☀️':'🌙';
+}
+themeToggle.addEventListener('click', ()=> {
+  const cur = document.documentElement.getAttribute('data-theme') || 'light';
+  const next = cur==='dark'?'light':'dark';
+  applyTheme(next); localStorage.setItem('theme', next);
+});
+applyTheme(localStorage.getItem('theme')||'light');
+
+// Live counter
+textEl.addEventListener('input', updateCounterAndStrength);
+window.addEventListener('load', updateCounterAndStrength);
+
+// Highlight server result on load
+if (resultEl.innerText.trim()) {
+  resultEl.classList.add('flash');
+  setTimeout(()=> resultEl.classList.remove('flash'),600);
+}
+
+// Drag & drop file logic
+dropZone.addEventListener("click", ()=> fileInput.click());
+dropZone.addEventListener("dragover", (e)=> { e.preventDefault(); dropZone.classList.add("dragover"); });
+dropZone.addEventListener("dragleave", ()=> dropZone.classList.remove("dragover"));
+dropZone.addEventListener("drop", (e)=> {
+  e.preventDefault(); dropZone.classList.remove("dragover");
+  fileInput.files = e.dataTransfer.files;
+
+  // Optional: auto-fill text area if .txt
+  const file = e.dataTransfer.files[0];
+  if(file && file.type === "text/plain"){
+    const reader = new FileReader();
+    reader.onload = ()=> textEl.value = reader.result;
+    reader.readAsText(file);
+  }
+});
+
+</script>
+</body>
+</html>
